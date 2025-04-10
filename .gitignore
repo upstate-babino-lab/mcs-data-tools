@@ -1,0 +1,76 @@
+# Python-specific
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.python-version
+env/
+venv/
+ENV/
+.venv/
+Lib/
+Include/
+bin/
+sdist/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+wheels/
+pip-wheel-metadata/
+install/
+pytest_cache/
+.pytest_cache/
+*.egg-info/
+.coverage
+*.so
+*.dylib
+
+# VS Code-specific
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.history/
+
+# OS-specific - adjust as needed
+.DS_Store
+Thumbs.db
+
+# General Python tools
+*.log
+*.pot
+*.egg
+
+# Jupyter Notebook related
+.ipynb_checkpoints/
+
+# Test and coverage reports
+htmlcov/
+.tox/
+coverage*
+*.nosetests
+nosetests.xml
+
+# Distribution / Packaging
+MANIFEST
+*.whl
+
+# Editor backups and temporary files
+*~
+\#*\#
+.*.swp
+.ropeproject
+.sourcemaps
+.dmypy_cache/
+.mypy_cache/
+
+# Other common project files/directories you might want to ignore
+data/  # If your data is large and not meant to be tracked
+logs/
+output/
+temp/
+tmp/

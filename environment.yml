@@ -1,0 +1,9 @@
+name: eye-anal
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - pip
+  - matplotlib
+  - scikit-learn
+prefix: /home/pwellner/miniconda3/envs/eye-anal

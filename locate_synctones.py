@@ -10,7 +10,7 @@ import h5py
 import numpy as np
 from scipy.signal import savgol_filter, find_peaks
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
-from h5_tools import valid_filename
+from h5_tools import get_date_and_duration, valid_filename
 from plot_data import plot_audio_data
 
 ANALOG_1_GROUP = "/Data/Recording_0/AnalogStream/Stream_3"
@@ -18,16 +18,6 @@ ANALOG_1_GROUP = "/Data/Recording_0/AnalogStream/Stream_3"
 
 def get_audio_data(file_path):
     with h5py.File(file_path, "r") as f:
-        dateRaw = f["/Data"].attrs.get("Date", "")
-        if isinstance(dateRaw, bytes):
-            dateStr = dateRaw.decode("utf-8")
-        print(f"Filename '{file_path}' recorded {dateStr}")
-
-        duration = f["/Data/Recording_0"].attrs.get("Duration", None)  # Microseconds
-        if duration is None:
-            raise Exception(f"Duration attribute not found in file {file_path}")
-        print(f"Duration: ~{duration / 60_000_000:.2f} minutes")
-
         group = f[ANALOG_1_GROUP]
 
         labelRaw = group.attrs.get("Label", "")
@@ -62,6 +52,8 @@ def main():
     parser.add_argument("-p", "--plot", action="store_true", help="Plot start of data")
 
     args = parser.parse_args()
+    get_date_and_duration(args.filename)
+
     audio_data = get_audio_data(args.filename)
 
     scaler = MinMaxScaler()

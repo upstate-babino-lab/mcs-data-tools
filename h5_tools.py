@@ -9,6 +9,19 @@ def valid_filename(filename):
         )
     return filename
 
+def get_date_and_duration(file_path):
+    with h5py.File(file_path, "r") as f:
+        dateRaw = f["/Data"].attrs.get("Date", "")
+        if isinstance(dateRaw, bytes):
+            dateStr = dateRaw.decode("utf-8")
+        print(f"Filename '{file_path}' recorded {dateStr}")
+
+        duration = f["/Data/Recording_0"].attrs.get("Duration", None)  # Microseconds
+        if duration is None:
+            raise Exception(f"Duration attribute not found in file {file_path}")
+        print(f"Duration: ~{duration / 60_000_000:.2f} minutes")
+        return dateStr, duration
+
 
 def display_group_contents(group, indent=0):
     print("  " * indent + f"Group: {group.name}")

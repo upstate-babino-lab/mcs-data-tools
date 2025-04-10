@@ -67,6 +67,7 @@ MANIFEST
 .sourcemaps
 .dmypy_cache/
 .mypy_cache/
+junk
 
 # Other common project files/directories you might want to ignore
 data/  # If your data is large and not meant to be tracked
@@ -74,3 +75,5 @@ logs/
 output/
 temp/
 tmp/
+junk/
+

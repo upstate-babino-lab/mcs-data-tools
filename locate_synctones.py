@@ -34,16 +34,33 @@ def get_audio_data(file_path):
                 f"Expected 'ChannelData' dataset not found in group {ANALOG_1_GROUP}"
             )
 
+        # If there are several analog channels, find the one with 'audio' in the label
         info = group["InfoChannel"][()]
-        microseconds_between_samples = info["Tick"][0]
+        nAnalogChannels = info.shape[0]
+        print(f"Number of analog channels = {nAnalogChannels}")
+        audioChannelNumber = 0
+        if nAnalogChannels > 0:
+            for i in range(nAnalogChannels):
+                if (
+                    "left" in info["Label"][i].decode("utf-8").lower()
+                    or "audio" in info["Label"][i].decode("utf-8").lower()
+                ):
+                    audioChannelNumber = i
+
+        label = info["Label"][audioChannelNumber].decode("utf-8")
+        print(f"Using channel {audioChannelNumber} with label = '{label}'")
+
+        microseconds_between_samples = info["Tick"][audioChannelNumber]
         data_rate = round(1_000_000 / microseconds_between_samples)
-        audio_data = group["ChannelData"][()].reshape(-1, 1)
-        duration_seconds = len(audio_data) / data_rate
+
+        analog_data = group["ChannelData"][audioChannelNumber, :]
+        print("Analog data shape:", analog_data.shape)
+        duration_seconds = len(analog_data) / data_rate
         print(
-            f"{len(audio_data)} samples @{data_rate}hz"
+            f"{len(analog_data)} samples @{data_rate}hz"
             + f" duration={round(duration_seconds)} seconds ={duration_seconds / 60:.2f} minutes"
         )
-        return audio_data
+        return analog_data.reshape(-1, 1)  # Reshape to single-column 2D array
 
 
 def main():
@@ -72,7 +89,7 @@ def main():
             scaled[min:max], squared[min:max], smoothed[min:max], peaks_in_range - min
         )
     print(f"Found {len(peaks)} peaks")
-    diffs = 10_000 - np.diff(peaks)
+    diffs = (10_000 - np.diff(peaks)) / 10  # Diffs in milliseconds
     mean_value = np.mean(diffs)
     min_value = np.min(diffs)
     max_value = np.max(diffs)
@@ -80,7 +97,7 @@ def main():
 
     # print(f"Diffs: {diffs}")
     print(
-        f"Diffs mean: {mean_value:.2f} min: {min_value} max: {max_value} stdDev: {std_dev:.2f}"
+        f"Millisecond diffs mean: {mean_value:.2f} min: {min_value} max: {max_value} stdDev: {std_dev:.2f}"
     )
 
     print(peaks / 10_000)  # Timestamps in seconds

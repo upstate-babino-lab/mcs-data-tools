@@ -24,9 +24,9 @@ def get_audio_data(file_path):
         if isinstance(labelRaw, bytes):
             labelStr = labelRaw.decode("utf-8")
 
-        if not "Analog Data1" in labelStr:
+        if not "Analog Data" in labelStr:
             raise Exception(
-                f"Expected string 'Analog Data1' not found in {ANALOG_1_GROUP} label {labelStr}"
+                f"Expected string 'Analog Data' not found in {ANALOG_1_GROUP} label {labelStr}"
             )
 
         if not "ChannelData" in group:

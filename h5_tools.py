@@ -28,7 +28,7 @@ def get_date_and_duration(file_path):
 
 def print_structure_with_data(item, name, indent="", max_lines=5, max_width=80):
     """
-    Recursive helper function to display the structure of an HDF5 item,
+    Recursive function to display the structure of an HDF5 item,
     including a preview of non-numerical data.
 
     Args:

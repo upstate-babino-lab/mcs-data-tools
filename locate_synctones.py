@@ -60,7 +60,10 @@ def get_audio_data(file_path):
             f"{len(analog_data)} samples @{data_rate}hz"
             + f" duration={round(duration_seconds)} seconds ={duration_seconds / 60:.2f} minutes"
         )
-        return analog_data.reshape(-1, 1)  # Reshape to single-column 2D array
+        return (
+            analog_data.reshape(-1, 1),
+            data_rate,
+        )  # Reshape to single-column 2D array
 
 
 def main():
@@ -71,7 +74,7 @@ def main():
     args = parser.parse_args()
     get_date_and_duration(args.filename)
 
-    audio_data = get_audio_data(args.filename)
+    audio_data, data_rate = get_audio_data(args.filename)
 
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(audio_data)
@@ -82,8 +85,8 @@ def main():
     )
     peaks, _ = find_peaks(smoothed.flatten(), height=0.5, distance=2000)
     if args.plot:
-        min = 4000
-        max = 7000
+        min = peaks[0] - 1500
+        max = peaks[0] + 1500
         peaks_in_range = peaks[(peaks > min) & (peaks < max)]
         plot_audio_data(
             scaled[min:max], squared[min:max], smoothed[min:max], peaks_in_range - min
@@ -100,6 +103,7 @@ def main():
         f"Millisecond diffs mean: {mean_value:.2f} min: {min_value} max: {max_value} stdDev: {std_dev:.2f}"
     )
 
+    print("SyncTone locations (seconds):")
     print(peaks / 10_000)  # Timestamps in seconds
 
 

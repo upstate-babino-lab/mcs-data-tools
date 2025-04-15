@@ -8,10 +8,11 @@
 import argparse
 import h5py
 import numpy as np
-from scipy.signal import savgol_filter, find_peaks, hilbert
+from scipy.signal import savgol_filter, find_peaks, resample
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from h5_tools import get_date_and_duration, valid_filename
 from plot_data import plot_data
+from utils import centered_moving_average, find_square_wave_steps
 
 ANALOG_1_GROUP = "/Data/Recording_0/AnalogStream/Stream_3"
 
@@ -76,17 +77,20 @@ def locate_synctones(file_path, do_plot=False):
     smoothed = scaler.fit_transform(
         savgol_filter((centered**2).flatten(), 1800, 3).reshape(audio_data.shape)
     )
-    peaks, _ = find_peaks(smoothed.flatten(), height=0.5, distance=2000)
+    peak_indices, _ = find_peaks(smoothed.flatten(), height=0.5, distance=2000)
     if do_plot:
-        min = peaks[0] - 2000
-        max = peaks[0] + 2000
-        peaks_in_range = peaks[(peaks > min) & (peaks < max)]
+        min = peak_indices[0] - 2000
+        max = peak_indices[0] + 2000
+        peaks_in_range = peak_indices[(peak_indices > min) & (peak_indices < max)]
         plot_data(
-            scaled[min:max], squared[min:max], smoothed[min:max], peaks_in_range - min
+            [scaled, squared, smoothed],
+            min,
+            max,
+            ["scaled", "squared", "smoothed"],
+            peaks_in_range - min,
         )
 
-    print(f"Found {len(peaks)} peaks")
-    diffs = (10_000 - np.diff(peaks)) / 10  # Diffs in milliseconds
+    diffs = (10_000 - np.diff(peak_indices)) / 10  # Diffs in milliseconds
     mean_value = np.mean(diffs)
     min_value = np.min(diffs)
     max_value = np.max(diffs)
@@ -94,7 +98,7 @@ def locate_synctones(file_path, do_plot=False):
     print(
         f"Millisecond diffs mean: {mean_value:.2f} min: {min_value} max: {max_value} stdDev: {std_dev:.2f}"
     )
-    return peaks / 10_000  # Timestamps in seconds
+    return peak_indices / 10_000  # Timestamps in seconds
 
 
 def locate_pda_transitions(file_path, do_plot=False):
@@ -102,10 +106,25 @@ def locate_pda_transitions(file_path, do_plot=False):
     scaler = RobustScaler()
     scaled = scaler.fit_transform(pda_data)
     thresholded = np.where(scaled > 0.5, 1, 0)
+    cma = centered_moving_average(thresholded.flatten() ** 2, 101)
+    thresholded = np.where(cma > 0.5, 1, 0)
+
+    step_indices = find_square_wave_steps(thresholded, 0.1)
     if do_plot:
-        min = 1000
+        min = 0
         max = 30000
-        plot_data(scaled[min:max], thresholded[min:max])
+        steps_in_range = step_indices[(step_indices > min) & (step_indices < max)]
+        plot_data(
+            [scaled, cma, thresholded],
+            min,
+            max,
+            ["scaled", "cma", "thresholded"],
+            steps_in_range - min,
+        )
+
+    return (
+        step_indices[1:][:-1] / 10_000
+    )  # Timestamps in seconds (without first and last)
 
 
 def main():
@@ -116,10 +135,34 @@ def main():
     args = parser.parse_args()
     get_date_and_duration(args.filename)
 
+    np.set_printoptions(suppress=True)  # Suppress scientific notation
+
     synctone_timestamps = locate_synctones(args.filename, args.plot)
+    print(f"Found {len(synctone_timestamps)} synctones")
     print(synctone_timestamps)
 
     pda_timestamps = locate_pda_transitions(args.filename, args.plot)
+    print(f"Found {len(pda_timestamps)} PDA transitions")
+    print(pda_timestamps)
+
+    if len(synctone_timestamps) != len(pda_timestamps):
+        raise Exception(
+            f"Number of synctones ({len(synctone_timestamps)}) does not match PDA transitions ({len(pda_timestamps)})"
+        )
+
+    diffs = (pda_timestamps - synctone_timestamps) * 1000
+    mean_delay = np.mean(diffs) # Mean delay of video detection relative to audio
+    median_delay = np.median(diffs)  # Median delay
+    centered_diffs = diffs - mean_delay
+    min_magnitude = np.min(centered_diffs)
+    max_magnitude = np.max(centered_diffs)
+    std_dev = np.std(centered_diffs)
+    print(
+        f"{len(diffs)} diffs "
+        f"mean: {mean_delay:.2f} "
+        f"median: {median_delay:.2f} "
+        f"min: {min_magnitude:.2f} max: {max_magnitude:.2f} stdDev: {std_dev:.2f}"
+    )
 
 
 if __name__ == "__main__":

@@ -1,20 +1,21 @@
 import os
-os.environ["QT_QPA_PLATFORM"] = "xcb" # Avoid wayland errors
+
+os.environ["QT_QPA_PLATFORM"] = "xcb"  # Avoid wayland errors
 import matplotlib.pyplot as plt
 import numpy as np
 
 
-def plot_data(raw, squared=None, smoothed=None, peaks=None):
-    x = np.arange(0, len(raw))
-    plt.figure(figsize=(12, 4))
-    plt.plot(x, raw, label="Raw", alpha=0.4)
-    if squared is not None:
-        plt.plot(x, squared, label="Squared", alpha=0.4)
-    if smoothed is not None:
-        plt.plot(x, smoothed, label="Smoothed")
+def plot_data(arrays, minX=None, maxX=None, labels=None, peaks=None):
+    for index, yfull in enumerate(arrays):
+        y = yfull[minX:maxX] if minX is not None and maxX is not None else yfull
+        x = np.arange(0, len(y))
+        plt.plot(x, y, label=labels[index] if labels else None, alpha=0.4)
+
     if peaks is not None:
-        plt.plot(peaks, smoothed[peaks], "rx", markersize=15, label="Peaks")
-    plt.legend()
+        plt.plot(peaks, y[peaks], "rx", markersize=15, label="Peaks")
+
+    if labels:
+        plt.legend()
     plt.grid(True)
     plt.tight_layout()
     plt.show()

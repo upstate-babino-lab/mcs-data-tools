@@ -8,7 +8,7 @@
 import argparse
 import h5py
 import numpy as np
-from scipy.signal import savgol_filter, find_peaks
+from scipy.signal import savgol_filter, find_peaks, hilbert
 from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from h5_tools import get_date_and_duration, valid_filename
 from plot_data import plot_data
@@ -99,13 +99,13 @@ def locate_synctones(file_path, do_plot=False):
 
 def locate_pda_transitions(file_path, do_plot=False):
     pda_data, _ = get_analog_data(file_path, "pda")
-    scaler = MinMaxScaler()
+    scaler = RobustScaler()
     scaled = scaler.fit_transform(pda_data)
-
+    thresholded = np.where(scaled > 0.5, 1, 0)
     if do_plot:
         min = 1000
         max = 30000
-        plot_data(pda_data[min:max])
+        plot_data(scaled[min:max], thresholded[min:max])
 
 
 def main():

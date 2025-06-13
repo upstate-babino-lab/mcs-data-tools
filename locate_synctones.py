@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 #
 # With a .h5 file exported from Multi Channel Systems DataManager
-# extract the audio data from the analog-in-1 channel, and locate
-# the precise timestamp of each synctone.
+# extract the audio data from any analog stream channel containing "audio", 
+# and locate the precise timestamp of each synctone.
 #
 
 import argparse
@@ -13,44 +13,76 @@ from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from h5_tools import get_date_and_duration, valid_filename
 from plot_data import plot_data
 from utils import centered_moving_average, find_square_wave_steps
+import os, csv
 
-ANALOG_1_GROUP = "/Data/Recording_0/AnalogStream/Stream_3"
 
-
-def get_analog_data(file_path, desiredLabelStr):
+def find_audio_channel(file_path, desiredLabelStr="audio"):
+    """
+    Search through all analog streams to find a channel containing the desired label string.
+    Returns the group path and channel number if found.
+    """
     with h5py.File(file_path, "r") as f:
-        group = f[ANALOG_1_GROUP]
+        # Look for all analog streams
+        recording_group = "/Data/Recording_0/AnalogStream"
+        
+        if recording_group not in f:
+            raise Exception(f"Recording group {recording_group} not found in file")
+        
+        analog_stream_group = f[recording_group]
+        
+        # Search through all streams
+        for stream_name in analog_stream_group.keys():
+            if stream_name.startswith("Stream_"):
+                stream_path = f"{recording_group}/{stream_name}"
+                print(f"Checking {stream_path}...")
+                
+                try:
+                    group = f[stream_path]
+                    
+                    # Check if this stream has the required components
+                    if "InfoChannel" not in group or "ChannelData" not in group:
+                        print(f"  Skipping {stream_path} - missing InfoChannel or ChannelData")
+                        continue
+                    
+                    # Check the stream label
+                    labelRaw = group.attrs.get("Label", "")
+                    if isinstance(labelRaw, bytes):
+                        labelStr = labelRaw.decode("utf-8")
+                    else:
+                        labelStr = str(labelRaw)
+                    
+                    if "Analog Data" not in labelStr:
+                        print(f"  Skipping {stream_path} - not analog data")
+                        continue
+                    
+                    # Search for the desired channel in this stream
+                    info = group["InfoChannel"][()]
+                    nAnalogChannels = info.shape[0]
+                    print(f"  Found {nAnalogChannels} analog channels")
+                    
+                    for i in range(nAnalogChannels):
+                        channel_label = info["Label"][i].decode("utf-8")
+                        print(f"    Channel {i}: '{channel_label}'")
+                        if desiredLabelStr.lower() in channel_label.lower():
+                            print(f"  Found audio channel {i} with label '{channel_label}' in {stream_path}")
+                            return stream_path, i
+                            
+                except Exception as e:
+                    print(f"  Error checking {stream_path}: {e}")
+                    continue
+        
+        raise Exception(f"Unable to find any channel with label containing '{desiredLabelStr}' in any analog stream")
 
-        labelRaw = group.attrs.get("Label", "")
-        if isinstance(labelRaw, bytes):
-            labelStr = labelRaw.decode("utf-8")
 
-        if not "Analog Data" in labelStr:
-            raise Exception(
-                f"Expected string 'Analog Data' not found in {ANALOG_1_GROUP} label {labelStr}"
-            )
-
-        if not "ChannelData" in group:
-            raise Exception(
-                f"Expected 'ChannelData' dataset not found in group {ANALOG_1_GROUP}"
-            )
-
-        # Find the channel with {desiredLabelStr} in the label
+def get_analog_data(file_path, desiredLabelStr="audio"):
+    stream_path, labeledChannelNumber = find_audio_channel(file_path, desiredLabelStr)
+    
+    with h5py.File(file_path, "r") as f:
+        group = f[stream_path]
+        
         info = group["InfoChannel"][()]
-        nAnalogChannels = info.shape[0]
-        print(f"Number of analog channels = {nAnalogChannels}")
-        labeledChannelNumber = -1
-        if nAnalogChannels > 0:
-            for i in range(nAnalogChannels):
-                if desiredLabelStr in info["Label"][i].decode("utf-8").lower():
-                    labeledChannelNumber = i
-        if labeledChannelNumber < 0:
-            raise Exception(
-                f"Unable to find channel with label '{desiredLabelStr}' in {ANALOG_1_GROUP}"
-            )
-
         label = info["Label"][labeledChannelNumber].decode("utf-8")
-        print(f"Using channel {labeledChannelNumber} with label = '{label}'")
+        print(f"Using channel {labeledChannelNumber} with label = '{label}' from {stream_path}")
 
         microseconds_between_samples = info["Tick"][labeledChannelNumber]
         data_rate = round(1_000_000 / microseconds_between_samples)
@@ -101,32 +133,6 @@ def locate_synctones(file_path, do_plot=False):
     return peak_indices / 10_000  # Timestamps in seconds
 
 
-def locate_pda_transitions(file_path, do_plot=False):
-    pda_data, _ = get_analog_data(file_path, "pda")
-    scaler = RobustScaler()
-    scaled = scaler.fit_transform(pda_data)
-    thresholded = np.where(scaled > 0.5, 1, 0)
-    cma = centered_moving_average(thresholded.flatten() ** 2, 101)
-    thresholded = np.where(cma > 0.5, 1, 0)
-
-    step_indices = find_square_wave_steps(thresholded, 0.1)
-    if do_plot:
-        min = 0
-        max = 30000
-        steps_in_range = step_indices[(step_indices > min) & (step_indices < max)]
-        plot_data(
-            [scaled, cma, thresholded],
-            min,
-            max,
-            ["scaled", "cma", "thresholded"],
-            steps_in_range - min,
-        )
-
-    return (
-        step_indices[1:][:-1] / 10_000
-    )  # Timestamps in seconds (without first and last)
-
-
 def main():
     parser = argparse.ArgumentParser(description="Process a single HDF5 (.h5) file.")
     parser.add_argument("filename", type=valid_filename, help="Path to the .h5 file")
@@ -141,28 +147,15 @@ def main():
     print(f"Found {len(synctone_timestamps)} synctones")
     print(synctone_timestamps)
 
-    pda_timestamps = locate_pda_transitions(args.filename, args.plot)
-    print(f"Found {len(pda_timestamps)} PDA transitions")
-    print(pda_timestamps)
-
-    if len(synctone_timestamps) != len(pda_timestamps):
-        raise Exception(
-            f"Number of synctones ({len(synctone_timestamps)}) does not match PDA transitions ({len(pda_timestamps)})"
-        )
-
-    diffs = (pda_timestamps - synctone_timestamps) * 1000
-    mean_delay = np.mean(diffs) # Mean delay of video detection relative to audio
-    median_delay = np.median(diffs)  # Median delay
-    centered_diffs = diffs - mean_delay
-    min_magnitude = np.min(centered_diffs)
-    max_magnitude = np.max(centered_diffs)
-    std_dev = np.std(centered_diffs)
-    print(
-        f"{len(diffs)} diffs "
-        f"mean: {mean_delay:.2f} "
-        f"median: {median_delay:.2f} "
-        f"min: {min_magnitude:.2f} max: {max_magnitude:.2f} stdDev: {std_dev:.2f}"
-    )
+    # Save timestamps to CSV
+    base_filename = os.path.splitext(args.filename)[0]
+    csv_filename = f"{base_filename}_synctones.csv"
+    with open(csv_filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Synctone Timestamp (s)'])
+        for sync in synctone_timestamps:
+            writer.writerow([sync])
+    print(f"\nSynctone timestamps saved to: {csv_filename}")
 
 
 if __name__ == "__main__":

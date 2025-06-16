@@ -2,7 +2,7 @@
 
 import h5py
 import sys
-
+# h5 Structure exploration 
 def explore_h5_structure(filename, max_depth=4):
     print(f'\n=== Structure of {filename} ===')
     try:
@@ -13,7 +13,7 @@ def explore_h5_structure(filename, max_depth=4):
                 indent = '  ' * depth
                 if isinstance(obj, h5py.Group):
                     print(f'{indent}{name}/ (Group)')
-                    # handling for AnalogStream to show detailed info
+                    # detailed info support in AnalogStream handling module
                     if 'AnalogStream' in name:
                         for key in obj.keys():
                             print(f'{indent}  {key}/')

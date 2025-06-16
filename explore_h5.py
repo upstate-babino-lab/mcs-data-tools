@@ -13,7 +13,7 @@ def explore_h5_structure(filename, max_depth=4):
                 indent = '  ' * depth
                 if isinstance(obj, h5py.Group):
                     print(f'{indent}{name}/ (Group)')
-                    # Special handling for AnalogStream to show detailed info
+                    # handling for AnalogStream to show detailed info
                     if 'AnalogStream' in name:
                         for key in obj.keys():
                             print(f'{indent}  {key}/')

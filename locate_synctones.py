@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 #
 # With a .h5 file exported from Multi Channel Systems DataManager
-# extract the audio data from any analog stream channel containing "audio", 
+# extract the audio data from any analog stream channel containing "audio",
+# or if no such channel is found, use the first analog channel.
 # and locate the precise timestamp of each synctone.
 #
 
@@ -16,73 +17,85 @@ from utils import centered_moving_average, find_square_wave_steps
 import os, csv
 
 
-def find_audio_channel(file_path, desiredLabelStr="audio"):
+def find_audio_channel(file_path, desiredLabelStr=""):
     """
     Search through all analog streams to find a channel containing the desired label string.
+    If no label is provided, it defaults to returning the first analog channel found.
     Returns the group path and channel number if found.
     """
     with h5py.File(file_path, "r") as f:
         # Look for all analog streams
         recording_group = "/Data/Recording_0/AnalogStream"
-        
+
         if recording_group not in f:
             raise Exception(f"Recording group {recording_group} not found in file")
-        
+
         analog_stream_group = f[recording_group]
-        
+
         # Search through all streams
         for stream_name in analog_stream_group.keys():
             if stream_name.startswith("Stream_"):
                 stream_path = f"{recording_group}/{stream_name}"
                 print(f"Checking {stream_path}...")
-                
+
                 try:
                     group = f[stream_path]
-                    
+
                     # Check if this stream has the required components
                     if "InfoChannel" not in group or "ChannelData" not in group:
-                        print(f"  Skipping {stream_path} - missing InfoChannel or ChannelData")
+                        print(
+                            f"  Skipping {stream_path} - missing InfoChannel or ChannelData"
+                        )
                         continue
-                    
+
                     # Check the stream label
                     labelRaw = group.attrs.get("Label", "")
                     if isinstance(labelRaw, bytes):
                         labelStr = labelRaw.decode("utf-8")
                     else:
                         labelStr = str(labelRaw)
-                    
+
                     if "Analog Data" not in labelStr:
                         print(f"  Skipping {stream_path} - not analog data")
                         continue
-                    
+
                     # Search for the desired channel in this stream
                     info = group["InfoChannel"][()]
                     nAnalogChannels = info.shape[0]
                     print(f"  Found {nAnalogChannels} analog channels")
-                    
+
                     for i in range(nAnalogChannels):
                         channel_label = info["Label"][i].decode("utf-8")
                         print(f"    Channel {i}: '{channel_label}'")
-                        if desiredLabelStr.lower() in channel_label.lower():
-                            print(f"  Found audio channel {i} with label '{channel_label}' in {stream_path}")
+                        if (
+                            desiredLabelStr == ""
+                            or desiredLabelStr.lower() in channel_label.lower()
+                        ):
+                            print(
+                                f"  Found audio channel {i} with label '{channel_label}' in {stream_path}"
+                            )
                             return stream_path, i
-                            
+
                 except Exception as e:
                     print(f"  Error checking {stream_path}: {e}")
                     continue
-        
-        raise Exception(f"Unable to find any channel with label containing '{desiredLabelStr}' in any analog stream")
+
+        raise Exception(
+            f"Unable to find any channel with label containing '{desiredLabelStr}' in any analog stream"
+        )
 
 
-def get_analog_data(file_path, desiredLabelStr="audio"):
+def get_analog_data(file_path, desiredLabelStr=""):
     stream_path, labeledChannelNumber = find_audio_channel(file_path, desiredLabelStr)
-    
+
     with h5py.File(file_path, "r") as f:
         group = f[stream_path]
-        
+
         info = group["InfoChannel"][()]
         label = info["Label"][labeledChannelNumber].decode("utf-8")
-        print(f"Using channel {labeledChannelNumber} with label = '{label}' from {stream_path}")
+        print(
+            f"Using channel {labeledChannelNumber} with label = '{label}' from {stream_path}"
+        )
 
         microseconds_between_samples = info["Tick"][labeledChannelNumber]
         data_rate = round(1_000_000 / microseconds_between_samples)
@@ -101,7 +114,14 @@ def get_analog_data(file_path, desiredLabelStr="audio"):
 
 
 def locate_synctones(file_path, do_plot=False):
-    audio_data, _ = get_analog_data(file_path, "audio")
+    try:
+        audio_data, _ = get_analog_data(file_path, "audio")
+    except Exception as e:
+        audio_data, _ = get_analog_data(file_path)
+        print(
+            "No audio channel found with 'audio' in label. Using first analog channel instead."
+        )
+
     scaler = MinMaxScaler()
     scaled = scaler.fit_transform(audio_data)
     centered = audio_data - np.mean(audio_data)
@@ -150,13 +170,16 @@ def main():
     # Save timestamps to CSV
     base_filename = os.path.splitext(args.filename)[0]
     csv_filename = f"{base_filename}_synctones.csv"
-    with open(csv_filename, 'w', newline='') as csvfile:
+    with open(csv_filename, "w", newline="") as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['Synctone Timestamp (s)'])
+        writer.writerow(["Synctone Timestamp (s)"])
         for sync in synctone_timestamps:
             writer.writerow([sync])
     print(f"\nSynctone timestamps saved to: {csv_filename}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(f"Error: {e}")
